@@ -1,0 +1,69 @@
+version: '3.9'
+services:
+  metabase-keycloak:
+    image: metabase/metabase-enterprise:v1.44.2
+    container_name: metabase-keycloak
+    hostname: metabase-keycloak
+    volumes:
+      - /dev/urandom:/dev/random:ro
+    ports:
+      - 3000:3000
+    environment:
+      - "MB_SITE_URL=http://localhost:3000"
+      - "MB_SAML_IDENTITY_PROVIDER_ISSUER=http://localhost:8080/auth/realms/master"
+      - "MB_SAML_IDENTITY_PROVIDER_URI=http://localhost:8080/auth/realms/master/protocol/saml"
+      - "MB_ENABLE_PASSWORD_LOGIN=false"
+      - "MB_SAML_ENABLED=true"
+      - "MB_SAML_ATTRIBUTE_EMAIL=email"
+      - "MB_SAML_ATTRIBUTE_FIRSTNAME=givenName"
+      - "MB_SAML_ATTRIBUTE_LASTNAME=sn"
+      - "MB_SAML_APPLICATION_NAME=metabase"
+      - "MB_PREMIUM_EMBEDDING_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      - "MB_EMAIL_SMTP_HOST=maildev-keycloak"
+      - "MB_EMAIL_SMTP_PASSWORD=password"
+      - "MB_EMAIL_SMTP_PORT=25"
+      - "MB_EMAIL_SMTP_SECURITY=none"
+      - "MB_EMAIL_SMTP_USERNAME=admin"
+    networks:
+      - metanet1-keycloak
+    healthcheck:
+      test: ["CMD-SHELL", "curl http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  setup:
+    image: bash:5.1.16
+    container_name: setup
+    volumes:
+      - $PWD/setup:/tmp
+    networks:
+      - metanet1-keycloak
+    depends_on:
+      metabase-keycloak:
+        condition: service_healthy
+    command: sh /tmp/metabase-setup.sh metabase-keycloak:3000
+    cpus: 1
+    mem_limit: 128m
+  keycloak:
+    image: jboss/keycloak:16.1.1
+    container_name: keycloak
+    ports:
+      - 8080:8080
+    networks:
+      - metanet1-keycloak
+    environment:
+      - "KEYCLOAK_USER=admin"
+      - "KEYCLOAK_PASSWORD=password"
+  maildev-keycloak:
+    image: maildev/maildev:1.1.0
+    container_name: maildev-keycloak
+    hostname: maildev-keycloak
+    ports:
+    - "3001:80"
+    networks:
+    - metanet1-keycloak
+    cpus: 1
+    mem_limit: 128m
+networks:
+  metanet1-keycloak:
+    driver: bridge
