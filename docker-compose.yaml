@@ -45,15 +45,16 @@ services:
     cpus: 1
     mem_limit: 128m
   keycloak:
-    image: jboss/keycloak:16.1.1
+    image: quay.io/keycloak/keycloak:19.0
     container_name: keycloak
     ports:
       - 8080:8080
     networks:
       - metanet1-keycloak
     environment:
-      - "KEYCLOAK_USER=admin"
-      - "KEYCLOAK_PASSWORD=password"
+      - "KEYCLOAK_ADMIN=admin"
+      - "KEYCLOAK_ADMIN_PASSWORD=password"
+    command: start-dev
   maildev-keycloak:
     image: maildev/maildev:1.1.0
     container_name: maildev-keycloak
