@@ -1,7 +1,7 @@
 version: '3.9'
 services:
   metabase-keycloak:
-    image: metabase/metabase-enterprise:v1.44.2
+    image: metabase/metabase-enterprise:v1.48.3
     container_name: metabase-keycloak
     hostname: metabase-keycloak
     volumes:
@@ -10,10 +10,10 @@ services:
       - 3000:3000
     environment:
       - "MB_SITE_URL=http://localhost:3000"
-      - "MB_SAML_IDENTITY_PROVIDER_ISSUER=http://localhost:8080/auth/realms/master"
-      - "MB_SAML_IDENTITY_PROVIDER_URI=http://localhost:8080/auth/realms/master/protocol/saml"
+      - "MB_SAML_IDENTITY_PROVIDER_ISSUER=http://localhost:9090/auth/realms/master"
+      - "MB_SAML_IDENTITY_PROVIDER_URI=http://localhost:9090/auth/realms/master/protocol/saml"
       - "MB_ENABLE_PASSWORD_LOGIN=false"
-      - "MB_SAML_ENABLED=true"
+      - "MB_SAML_ENABLED=false"
       - "MB_SAML_ATTRIBUTE_EMAIL=email"
       - "MB_SAML_ATTRIBUTE_FIRSTNAME=givenName"
       - "MB_SAML_ATTRIBUTE_LASTNAME=sn"
@@ -27,40 +27,42 @@ services:
     networks:
       - metanet1-keycloak
     healthcheck:
-      test: ["CMD-SHELL", "curl http://localhost:3000/api/health"]
+      test: ["CMD-SHELL", "curl -f -X GET -I http://localhost:3000/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
-  setup:
-    image: bash:5.1.16
-    container_name: setup
-    volumes:
-      - $PWD/setup:/tmp
-    networks:
-      - metanet1-keycloak
-    depends_on:
-      metabase-keycloak:
-        condition: service_healthy
-    command: sh /tmp/metabase-setup.sh metabase-keycloak:3000
-    cpus: 1
-    mem_limit: 128m
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 3072M
+        reservations:
+          cpus: '4'
+          memory: 1536M
   keycloak:
-    image: quay.io/keycloak/keycloak:19.0
+    image: quay.io/keycloak/keycloak:23.0
     container_name: keycloak
     ports:
-      - 8080:8080
+      - 9090:8080
     networks:
       - metanet1-keycloak
     environment:
       - "KEYCLOAK_ADMIN=admin"
       - "KEYCLOAK_ADMIN_PASSWORD=password"
-    command: start-dev
-  maildev-keycloak:
-    image: maildev/maildev:1.1.0
-    container_name: maildev-keycloak
-    hostname: maildev-keycloak
+      - "KC_DB=postgres"
+      - "KC_DB_URL_HOST=postgres-keycloak"
+      - "KC_DB_URL_PORT=5432"
+      - "KC_DB_URL_DATABASE=keycloak"
+      - "KC_DB_USERNAME=keycloak"
+      - "KC_DB_PASSWORD=keycloak"
+    command: start-dev --hostname=localhost
+  maildev-sub-keycloak:
+    image: maildev/maildev:2.1.0
+    container_name: maildev-sub-keycloak
+    hostname: maildev-sub
     ports:
-    - "3001:80"
+    - "3001:1080"
+    - "3025:1025"
     networks:
     - metanet1-keycloak
     cpus: 1
