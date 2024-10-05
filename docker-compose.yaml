@@ -1,0 +1,139 @@
+services:
+  metabase-keycloak:
+    image: metabase/metabase-enterprise:v1.50.27
+    container_name: metabase-keycloak
+    hostname: metabase-keycloak
+    volumes:
+      - /dev/urandom:/dev/random:ro
+    ports:
+      - 3000:3000
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: metabase
+      MB_DB_PASS: mysecretpassword
+      MB_DB_HOST: postgres-app-db-keycloak
+      MB_SITE_URL: http://localhost:3000
+      # MB_SAML_IDENTITY_PROVIDER_ISSUER: http://localhost:9090/realms/master
+      # MB_SAML_IDENTITY_PROVIDER_URI: http://localhost:9090/realms/master/protocol/saml
+      # MB_ENABLE_PASSWORD_LOGIN=false
+      # MB_SAML_ENABLED: true
+      # MB_SAML_ATTRIBUTE_EMAIL: email
+      # MB_SAML_ATTRIBUTE_FIRSTNAME: given_name
+      # MB_SAML_ATTRIBUTE_LASTNAME: surname
+      # MB_SAML_APPLICATION_NAME: metabase
+      # MB_PREMIUM_EMBEDDING_TOKEN: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+      MB_EMAIL_SMTP_HOST: maildev-sub
+      MB_EMAIL_SMTP_PASSWORD: password
+      MB_EMAIL_SMTP_PORT: 1025
+      MB_EMAIL_SMTP_SECURITY: none
+      MB_EMAIL_SMTP_USERNAME: admin
+      JAVA_TOOL_OPTIONS: -Xmx1488m -Xms500m
+      # MB_JWT_IDENTITY_PROVIDER_URI: http://localhost:8080/api/auth/metabase
+      # MB_JWT_ENABLED: true
+    networks:
+      - metanet1-keycloak
+    depends_on:
+      postgres-keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f -X GET -I http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 3072M
+        reservations:
+          cpus: '2'
+          memory: 1536M
+  postgres-app-db-keycloak:
+    image: postgres:17-alpine
+    ports:
+      - 5432:5432
+    container_name: postgres-app-db-keycloak
+    hostname: postgres-app-db-keycloak
+    environment:
+      - "POSTGRES_USER=metabase"
+      - "POSTGRES_DB=metabase"
+      - "POSTGRES_PASSWORD=mysecretpassword"
+    volumes:
+      - $PWD/postgres_origin:/var/lib/postgresql/data
+    networks:
+      - metanet1-keycloak
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metabase -d metabase"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  setup:
+    image: bash:5.2.15
+    container_name: setup
+    volumes:
+      - $PWD/setup:/tmp
+    networks:
+      - metanet1-keycloak
+    depends_on:
+      metabase-keycloak:
+        condition: service_healthy
+    command: sh /tmp/metabase-setup.sh metabase-keycloak:3000
+    cpus: 1
+    mem_limit: 128m
+  keycloak:
+    build:
+      context: keycloak
+      dockerfile: Dockerfile
+    container_name: keycloak
+    ports:
+      - 9090:8080
+    networks:
+      - metanet1-keycloak
+    environment:
+      - "KEYCLOAK_ADMIN=admin"
+      - "KEYCLOAK_ADMIN_PASSWORD=password"
+      - "KC_DB=postgres"
+      - "KC_DB_URL_HOST=postgres-keycloak"
+      - "KC_DB_URL_PORT=5432"
+      - "KC_DB_URL_DATABASE=keycloak"
+      - "KC_DB_USERNAME=keycloak"
+      - "KC_DB_PASSWORD=keycloak"
+    command: start-dev --hostname=localhost
+    depends_on:
+      postgres-keycloak:
+        condition: service_healthy
+  postgres-keycloak:
+    image: postgres:17-alpine
+    container_name: postgres-keycloak
+    hostname: postgres-keycloak
+    environment:
+      - "POSTGRES_USER=keycloak"
+      - "POSTGRES_DB=keycloak"
+      - "POSTGRES_PASSWORD=keycloak"
+    volumes:
+      - $PWD/postgres_keycloak:/var/lib/postgresql/data
+    networks:
+      - metanet1-keycloak
+    cpus: 1
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  maildev-sub-keycloak:
+    image: maildev/maildev:2.1.0
+    container_name: maildev-sub-keycloak
+    hostname: maildev-sub
+    ports:
+    - "3001:1080"
+    - "3025:1025"
+    networks:
+    - metanet1-keycloak
+    cpus: 1
+    mem_limit: 128m
+networks:
+  metanet1-keycloak:
+    driver: bridge
